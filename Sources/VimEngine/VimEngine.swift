@@ -6,6 +6,7 @@ import AppKit
 /// Minimal interface VimEngine needs from the editor. NSTextView conforms
 /// via an extension; tests use a small stub so engine logic can be
 /// exercised without instantiating AppKit windows.
+@MainActor
 public protocol VimTextEditor: AnyObject {
     var text: String { get set }
     var selectedRange: NSRange { get set }
@@ -51,6 +52,7 @@ extension VimTextEditor {
 /// markdown entry without leaving the panel." Modes: normal, insert,
 /// command-line. State machine driven by `handleKey`. See
 /// `VimEngineTests` for the exhaustive behavior contract.
+@MainActor
 public final class VimEngine {
     public enum Submode: String {
         case normal, insert, command, replace, visual, visualLine, search
@@ -2162,7 +2164,7 @@ public final class VimEngine {
 
 /// Modifier flags VimEngine cares about. Tiny enum so tests don't need
 /// to construct AppKit event flags.
-public struct KeyModifiers: OptionSet {
+public struct KeyModifiers: OptionSet, Sendable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
 

@@ -2,9 +2,19 @@ import Foundation
 import VimEngine
 
 // Minimal test harness (no Xcode required)
-var passed = 0
-var failed = 0
+//
+// VimEngine and VimTextEditor are @MainActor since v1.0.1, which makes
+// `handleKey` and any conforming stub `@MainActor`-isolated. Helpers
+// here mirror that isolation so calls compile under Swift 6 strict
+// concurrency. Top-level executable code is wrapped in
+// `MainActor.assumeIsolated { ... }` further down — that runs the test
+// suite synchronously on the main thread (true at program start) and
+// gives the closure body `@MainActor` isolation so the test bodies can
+// touch the engine without per-call hops.
+@MainActor var passed = 0
+@MainActor var failed = 0
 
+@MainActor
 func expect(_ condition: Bool, _ message: String = "", file: String = #file, line: Int = #line) {
     if condition {
         passed += 1
@@ -15,6 +25,7 @@ func expect(_ condition: Bool, _ message: String = "", file: String = #file, lin
     }
 }
 
+@MainActor
 func test(_ name: String, _ body: () throws -> Void) {
     do {
         try body()
@@ -27,6 +38,7 @@ func test(_ name: String, _ body: () throws -> Void) {
 
 // ─── VimEngine ───
 
+@MainActor
 final class StubEditor: VimTextEditor {
     var text: String
     var selectedRange: NSRange
@@ -87,6 +99,7 @@ final class StubEditor: VimTextEditor {
 /// Feed each key in `keys` to the engine. A key is either:
 ///   * a 1-char string (e.g. "h", "i") — its first character.
 ///   * a sentinel like "<esc>", "<enter>", "<bs>" for special keys.
+@MainActor
 func feed(_ engine: VimEngine, _ keys: [String], on editor: VimTextEditor) {
     for k in keys {
         let (chars, keyCode): (String?, UInt16)
@@ -118,6 +131,15 @@ func feed(_ engine: VimEngine, _ keys: [String], on editor: VimTextEditor) {
         engine.handleKey(chars: chars, keyCode: keyCode, modifiers: [], editor: editor)
     }
 }
+
+// Top-level expressions in an executable target run nonisolated under
+// swift-tools 5.9, but `test`, `feed`, and the engine itself are now
+// `@MainActor`. `MainActor.assumeIsolated` runs the closure
+// synchronously on the current thread — which is the main thread at
+// program start — and gives the body `@MainActor` isolation so the test
+// suite compiles unchanged. Trap at runtime if we're ever not on main,
+// which would itself be a bug.
+MainActor.assumeIsolated {
 
 test("VimEngine: starts in normal mode") {
     let engine = VimEngine()
@@ -1470,3 +1492,5 @@ print("\n\(passed + failed) tests, \(passed) passed, \(failed) failed")
 if failed > 0 {
     exit(1)
 }
+
+}  // end of MainActor.assumeIsolated
