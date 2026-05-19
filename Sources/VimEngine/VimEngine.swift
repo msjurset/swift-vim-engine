@@ -1612,9 +1612,16 @@ public final class VimEngine {
 
         switch motion {
         case .left:
-            return max(0, cursor - count)
+            // Bounded by line start — vim's `h` doesn't wrap onto the
+            // previous line's newline glyph by default.
+            let curLineStart = lineStart(in: nsText, of: cursor)
+            return max(curLineStart, cursor - count)
         case .right:
-            return min(len, cursor + count)
+            // Bounded by line end (position of the trailing \n, or
+            // buffer length on the last line). `l` doesn't cross
+            // newlines by default.
+            let curLineEnd = lineEnd(in: nsText, of: cursor)
+            return min(curLineEnd, cursor + count)
         case .up:
             return moveByLines(text: nsText, from: cursor, delta: -count)
         case .down:

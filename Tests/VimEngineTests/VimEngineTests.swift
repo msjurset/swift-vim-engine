@@ -327,6 +327,35 @@ test("VimEngine: arrow keys are routed to motions in normal mode") {
     expect(ed.selectedRange.location == 1)
 }
 
+test("VimEngine: h does not cross line boundary backward") {
+    let engine = VimEngine()
+    let ed = StubEditor("abc\ndef\nghi", caret: 4)  // 'd' of "def"
+    feed(engine, ["h"], on: ed)
+    // Standard vim: h at column 0 of line 2 is a no-op; the cursor
+    // does NOT wrap onto the preceding \n.
+    expect(ed.selectedRange.location == 4, "got \(ed.selectedRange.location)")
+}
+
+test("VimEngine: l does not cross line boundary forward") {
+    let engine = VimEngine()
+    let ed = StubEditor("abc\ndef\nghi", caret: 2)  // 'c' of "abc"
+    feed(engine, ["l"], on: ed)
+    // Cursor lands on the position of the trailing \n at end of line 1
+    // (position 3) — that's the line-end boundary. NOT onto line 2.
+    expect(ed.selectedRange.location == 3, "got \(ed.selectedRange.location)")
+    feed(engine, ["l"], on: ed)
+    // Further `l` is still bounded by the same line end.
+    expect(ed.selectedRange.location == 3, "got \(ed.selectedRange.location)")
+}
+
+test("VimEngine: l on last line bounded by buffer end") {
+    let engine = VimEngine()
+    let ed = StubEditor("abc", caret: 0)
+    feed(engine, ["l", "l", "l", "l"], on: ed)
+    // No trailing newline, so the bound is the buffer length.
+    expect(ed.selectedRange.location == 3, "got \(ed.selectedRange.location)")
+}
+
 test("VimEngine: ^ moves to first non-blank of line") {
     let engine = VimEngine()
     let ed = StubEditor("    hello world", caret: 10)
