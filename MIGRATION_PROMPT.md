@@ -102,6 +102,25 @@ release requires a host-side change (e.g. a new protocol method on
 `VimTextEditor`), the release notes / `CHANGELOG.md` in the package
 repo will say so. Read those before bumping past a major version.
 
+**Convenience Makefile target.** Add this to your app's `Makefile` so
+the incantation is documented:
+
+    .PHONY: update-vim
+    update-vim:
+        @echo "Updating swift-vim-engine to the latest tagged release..."
+        @swift package update swift-vim-engine
+        @echo "Review Package.resolved, smoke test, then commit."
+
+**If a bump breaks your build.** Pin to the previous version while you
+sort it out — don't leave the app broken:
+
+    .package(url: "https://github.com/msjurset/swift-vim-engine.git", exact: "1.0.0")
+
+Then either adapt your host code to the new release's requirements,
+or wait for a release that restores the expected behavior. Tell the
+package maintainer if you think a release got the semver wrong (e.g.
+a source-breaking change shipped as a patch bump instead of a major).
+
 ## Deliver
 
 When you're done, give me:
