@@ -1,5 +1,21 @@
 # Paste this into a fresh Claude session in your other Swift app
 
+> **Recommended: add VimEngine as a versioned dependency** instead of
+> copying source. It lives at
+> [`msjurset/swift-vim-engine`](https://github.com/msjurset/swift-vim-engine).
+>
+>     dependencies: [
+>         .package(url: "https://github.com/msjurset/swift-vim-engine.git", from: "1.0.0")
+>     ]
+>
+> and in your target:
+>
+>     .product(name: "VimEngine", package: "swift-vim-engine")
+>
+> Fixes land in the package; consumers pick them up by bumping the
+> version. Do NOT copy `VimEngine.swift` directly — that fragments the
+> codebase and the next bug will be fixed in N places.
+
 ---
 
 I want to add a `/vim` slash command + full vim editor mode to a text input
