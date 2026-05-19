@@ -183,6 +183,16 @@ classes locks in the duplication.
    See `setSelectedRanges` in `EntryEditorView.swift` for the
    reference implementation that does both.
 
+   **Important — don't try to be clever with partial invalidation.**
+   The original jrnlbar implementation computed OLD and NEW
+   block-cursor rects and called `setNeedsDisplay(rect:)` on each.
+   That looked right but caused stale "double cursor" pixels in
+   practice: AppKit sometimes coalesced or skipped the partial
+   invalidation under load, leaving the previous block visible after
+   a fast move. The fix is to force a full repaint with
+   `needsDisplay = true` whenever the caret moves in a
+   block-cursor submode. The text view is small; the cost is fine.
+
 5. **Mode badge UI.** A small button/pill in your toolbar or status area
    showing `engine.badge` (`VIM:N`, `VIM:I`, `:q`, `/term`). Click clears the
    mode. Wire `engine.onSubmodeChanged` and `engine.onCommandBufferChanged`
