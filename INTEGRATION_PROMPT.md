@@ -114,6 +114,55 @@ classes locks in the duplication.
    `Cmd+V/C/X/Z` and similar still go through `performKeyEquivalent`
    *before* `keyDown`, so they keep working.
 
+   **If you override `performKeyEquivalent` to ensure Cmd shortcuts
+   keep working while vim intercepts `keyDown`, gate the handler on
+   first responder.** `performKeyEquivalent` walks the entire view
+   hierarchy and the first view to return `true` claims the event —
+   without the gate, *any* VimHostTextView in the window will snatch
+   Cmd+V from another focused text field (e.g. a single-line title
+   field next to a multi-line notes editor). The user presses Cmd+V
+   in Title, your vim-host paste fires on itself, and Title sees
+   nothing. Pattern:
+
+       override func performKeyEquivalent(with event: NSEvent) -> Bool {
+           guard isCurrentFirstResponder,
+                 event.modifierFlags.contains(.command)
+           else { return super.performKeyEquivalent(with: event) }
+           switch event.charactersIgnoringModifiers {
+           case "v": pasteAsPlainText(nil); return true
+           case "c": copy(nil); return true
+           case "x": cut(nil); return true
+           case "a": selectAll(nil); return true
+           case "z":
+               if event.modifierFlags.contains(.shift) {
+                   undoManager?.redo()
+               } else {
+                   undoManager?.undo()
+               }
+               return true
+           default: return super.performKeyEquivalent(with: event)
+           }
+       }
+
+       /// True when this text view (via its field editor) actually
+       /// owns keyboard focus in its window. NSTextView's
+       /// `firstResponder` for an editable text view is typically
+       /// the view itself, but the field editor variant routes
+       /// through the NSText delegate, so we check both.
+       private var isCurrentFirstResponder: Bool {
+           guard let fr = window?.firstResponder else { return false }
+           if fr === self { return true }
+           if let text = fr as? NSText, text.delegate === self { return true }
+           return false
+       }
+
+   jrnlbar's single-input panel doesn't trip on this because there
+   are no other text fields competing — but the reference pattern
+   was missing the gate. If you copy the reference into a host with
+   multiple text inputs (sheets, inspector panes, editable forms),
+   apply the gate above or every Cmd shortcut in the window gets
+   hijacked.
+
 3. **Block cursor** — override `drawInsertionPoint(in:color:turnedOn:)`.
    When `vim.submode != .insert`, fill a one-character-wide cell at
    the caret. Reference: `blockCursorRect()` and `approximateCharWidth()`

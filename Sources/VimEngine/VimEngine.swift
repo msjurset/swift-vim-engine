@@ -773,8 +773,71 @@ public final class VimEngine {
         case "(", ")": return bracketObjectRange(around: around, in: ns, at: cursor, open: 0x28, close: 0x29)
         case "[", "]": return bracketObjectRange(around: around, in: ns, at: cursor, open: 0x5B, close: 0x5D)
         case "{", "}": return bracketObjectRange(around: around, in: ns, at: cursor, open: 0x7B, close: 0x7D)
+        case "p": return paragraphObjectRange(around: around, in: ns, at: cursor)
         default: return nil
         }
+    }
+
+    private func paragraphObjectRange(around: Bool, in text: NSString, at cursor: Int) -> NSRange? {
+        let len = text.length
+        guard cursor < len else { return nil }
+
+        let onBlank = isLineBlank(in: text, at: cursor)
+        var start = lineStart(in: text, of: cursor)
+        var end = lineEnd(in: text, of: cursor)
+        if end < len { end += 1 } // include newline
+        
+        if onBlank {
+            while start > 0 {
+                let prev = lineStart(in: text, of: max(0, start - 1))
+                if isLineBlank(in: text, at: prev) {
+                    start = prev
+                } else { break }
+            }
+            while end < len, isLineBlank(in: text, at: end) {
+                let next = lineEnd(in: text, of: end)
+                end = next
+                if end < len { end += 1 }
+            }
+            if around {
+                while end < len, !isLineBlank(in: text, at: end) {
+                    let next = lineEnd(in: text, of: end)
+                    end = next
+                    if end < len { end += 1 }
+                }
+            }
+        } else {
+            while start > 0 {
+                let prev = lineStart(in: text, of: max(0, start - 1))
+                if !isLineBlank(in: text, at: prev) {
+                    start = prev
+                } else { break }
+            }
+            while end < len {
+                if isLineBlank(in: text, at: end) { break }
+                let next = lineEnd(in: text, of: end)
+                end = next
+                if end < len { end += 1 }
+            }
+            if around {
+                var consumedTrailing = false
+                while end < len, isLineBlank(in: text, at: end) {
+                    consumedTrailing = true
+                    let next = lineEnd(in: text, of: end)
+                    end = next
+                    if end < len { end += 1 }
+                }
+                if !consumedTrailing {
+                    while start > 0 {
+                        let prev = lineStart(in: text, of: max(0, start - 1))
+                        if isLineBlank(in: text, at: prev) {
+                            start = prev
+                        } else { break }
+                    }
+                }
+            }
+        }
+        return NSRange(location: start, length: end - start)
     }
 
     private func wordObjectRange(around: Bool, in text: NSString, at cursor: Int, big: Bool) -> NSRange? {
@@ -2039,19 +2102,31 @@ public final class VimEngine {
     private func nextParagraph(in text: NSString, from cursor: Int) -> Int {
         let len = text.length
         var i = cursor
-        // Skip current line.
+        if i >= len { return len }
+        
+        let startIsBlank = isLineBlank(in: text, at: i)
+        
+        // Always move to the next line first
         i = lineEnd(in: text, of: i)
         if i < len { i += 1 }
-        // Skip blank lines we might already be on.
-        while i < len, isLineBlank(in: text, at: i) {
-            i = lineEnd(in: text, of: i)
-            if i < len { i += 1 }
-        }
-        // Now on non-blank line. Walk forward until we hit a blank line
-        // or EOF.
-        while i < len, !isLineBlank(in: text, at: i) {
-            i = lineEnd(in: text, of: i)
-            if i < len { i += 1 } else { break }
+        
+        if startIsBlank {
+            // We started on a blank line. Skip all contiguous blank lines.
+            while i < len, isLineBlank(in: text, at: i) {
+                i = lineEnd(in: text, of: i)
+                if i < len { i += 1 }
+            }
+            // Now we're on a non-blank line. Skip the paragraph until the next blank line.
+            while i < len, !isLineBlank(in: text, at: i) {
+                i = lineEnd(in: text, of: i)
+                if i < len { i += 1 } else { break }
+            }
+        } else {
+            // We started in a paragraph. Just find the next blank line.
+            while i < len, !isLineBlank(in: text, at: i) {
+                i = lineEnd(in: text, of: i)
+                if i < len { i += 1 } else { break }
+            }
         }
         return min(i, len)
     }
@@ -2060,21 +2135,35 @@ public final class VimEngine {
     private func previousParagraph(in text: NSString, from cursor: Int) -> Int {
         var i = cursor
         if i == 0 { return 0 }
-        // Step to start of previous line.
+        
+        let startIsBlank = isLineBlank(in: text, at: i)
+        
+        // Move to the previous line.
         i = lineStart(in: text, of: i)
         if i > 0 { i -= 1 }
         i = lineStart(in: text, of: i)
-        // Skip blank lines.
-        while i > 0, isLineBlank(in: text, at: i) {
-            if i == 0 { break }
-            i = lineStart(in: text, of: max(0, i - 1))
-        }
-        // Walk backward through non-blank until blank or BOF.
-        while i > 0, !isLineBlank(in: text, at: i) {
-            if i == 0 { break }
-            let prevLineStart = lineStart(in: text, of: max(0, i - 1))
-            if isLineBlank(in: text, at: prevLineStart) { i = prevLineStart; break }
-            i = prevLineStart
+        
+        if startIsBlank {
+            // We started on a blank line. Skip contiguous blank lines upward.
+            while i > 0, isLineBlank(in: text, at: i) {
+                if i == 0 { break }
+                i = lineStart(in: text, of: max(0, i - 1))
+            }
+            // Skip non-blank lines upward.
+            while i > 0, !isLineBlank(in: text, at: i) {
+                if i == 0 { break }
+                let prevLineStart = lineStart(in: text, of: max(0, i - 1))
+                if isLineBlank(in: text, at: prevLineStart) { i = prevLineStart; break }
+                i = prevLineStart
+            }
+        } else {
+            // Started in a paragraph. Find first blank line upward.
+            while i > 0, !isLineBlank(in: text, at: i) {
+                if i == 0 { break }
+                let prevLineStart = lineStart(in: text, of: max(0, i - 1))
+                if isLineBlank(in: text, at: prevLineStart) { i = prevLineStart; break }
+                i = prevLineStart
+            }
         }
         return max(0, i)
     }
