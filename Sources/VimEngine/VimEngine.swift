@@ -2380,6 +2380,39 @@ extension NSTextView: VimTextEditor {
         let charIdx = layoutManager.characterIndexForGlyph(at: glyphIdx)
         return min(max(0, charIdx), (string as NSString).length)
     }
+
+    /// Dynamically updates `textContainer.exclusionPaths` so the first line of text has fewer
+    /// columns and wraps cleanly before colliding with the top-right Vim mode badge (`VIM:N` / `VIM:I` + `?`).
+    /// Call from `setFrameSize`, `layout`, `didChangeText`, and when toggling Vim mode on/off.
+    public func updateVimBadgeExclusionPath(
+        isVimActive: Bool,
+        badgeWidth: CGFloat = 115.0,
+        badgeHeight: CGFloat? = nil
+    ) {
+        guard let textContainer = self.textContainer else { return }
+        if isVimActive {
+            let width = bounds.width > 0 ? bounds.width : textContainer.containerSize.width
+            let lineHeight = layoutManager?.defaultLineHeight(
+                for: font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+            ) ?? 15.0
+            let effectiveHeight = badgeHeight ?? max(10.0, lineHeight - 2.0)
+            if width > badgeWidth + 40 {
+                let exclusionRect = NSRect(
+                    x: width - badgeWidth - textContainerInset.width,
+                    y: 0,
+                    width: badgeWidth + textContainerInset.width,
+                    height: effectiveHeight
+                )
+                if textContainer.exclusionPaths.first?.bounds != exclusionRect {
+                    textContainer.exclusionPaths = [NSBezierPath(rect: exclusionRect)]
+                }
+            } else if !textContainer.exclusionPaths.isEmpty {
+                textContainer.exclusionPaths = []
+            }
+        } else if !textContainer.exclusionPaths.isEmpty {
+            textContainer.exclusionPaths = []
+        }
+    }
 }
 
 extension KeyModifiers {
